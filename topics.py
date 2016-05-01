@@ -9,9 +9,12 @@ import urllib.parse
 import json
 import re
 import html
+import mysqlClass
+import time
+import pymysql
 
 
-class ZhihuTopic:
+class zhihuTopic:
     topUrl = "https://www.zhihu.com/topics"
 
     def __init__(self):
@@ -107,7 +110,7 @@ class ZhihuTopic:
 
         #评论数
         comment = re.findall(r'<i class=\"z-icon-comment\"><\/i>(.*)<\/a>', htmlText, re.I);
-        commentCount = comment[0].replace('条评论', '')
+        commentCount = comment[0].replace('条评论', '').replace(' ','')
 
         #问题的回答总数
 
@@ -125,16 +128,17 @@ class ZhihuTopic:
         answerId = answerText[0]
 
 
-        print(answerContent)
-        print(voteCount)
-        print(commentCount)
-        print(questionTitle)
-        print(answerId)
+        mysqlObj = mysqlClass.mysqlClass('localhost', 'root', 'root', 'zhihu')
+        table = 'zhihu_answer'
+        addTime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        valueStr = " (`answer_id`, `question_id`, `vote_count`, `comment_num`, `content`, `add_time` ) VALUES " \
+                   " ('"+ answerId + "','" + questionId + "','" + voteCount[0] + "','"
+        valueStr = valueStr + commentCount + "','" + pymysql.escape_string(answerContent[0]) + "','" + addTime + "')"
+        mysqlObj.insertRow(table, valueStr )
 
-        print(questionId)
 
 
-s = ZhihuTopic()
+s = zhihuTopic()
 htmlText = s.getTopContent()
 print(s.getTopSignList(htmlText));
 

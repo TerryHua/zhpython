@@ -6,8 +6,8 @@ import pymysql
 class mysqlClass:
     dbconnect = '';
 
-    def __init__(self, host, user, pwd, dbname):
-        self.dbconnect = pymysql.connect(host, user, pwd, dbname)
+    def __init__(self, host, user, pwd, dbname, port=3306):
+        self.dbconnect = pymysql.connect(host, user, pwd, dbname, port, '','utf8')
 
 
     def query(self, sql):
@@ -84,6 +84,7 @@ class mysqlClass:
 
         # SQL 插入语句
         sql = "INSERT INTO " + table + value;
+
         try:
             # 执行sql语句
             cursor.execute(sql)

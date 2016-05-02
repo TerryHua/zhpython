@@ -76,8 +76,14 @@ class zhihuTopic:
 
         topicId = topicInfo[0]
 
+        table = 'zhihu_topics'
+        addTime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        valueStr = " (`topic_id`, `topic`, `topic_tag`, `follwer_user`,  `add_time`, `parent_topic_id` ) VALUES " \
+                   " ('" + topicId + "','" + topicTitle + "','" + '' + "','" + '0' + "', '" + addTime + \
+                   "','" + '0' + "')"
+        self.mysqlObj.insertRow(table, valueStr)
 
-        for i in range(0, 10000, 20):
+        for i in range(0, 2000, 20):
 
             #url组装
             url = "https://www.zhihu.com/node/"+paramDict['nodename']
@@ -92,7 +98,10 @@ class zhihuTopic:
                 for textRow in textDestinationDict['msg']:
                     urlLink = self.getSignLink (textRow)
                     for page in range(1, 50):
-                        self.getTopicTopAnswers(urlLink, topicTitle, topicId, page)
+                        result = self.getTopicTopAnswers(urlLink, topicTitle, topicId, page)
+                        if result == False:
+                            break;
+
 
 
 
@@ -110,29 +119,39 @@ class zhihuTopic:
     def getTopicTopAnswers(self, urlLink, topicTitle='', topicId='1', page='1'):
         #获取话题的精华题目和答案
         print (urlLink)
+        newTopicId = urlLink.replace('https://www.zhihu.com/topic/', '').replace('/top-answers', '')
         urlLink = urlLink+'?page='+str(page)
-        req = urllib.request.Request(urlLink)
-        response = urllib.request.urlopen(req)
-        htmlText2 = response.read().decode('UTF-8')
+        try:
+            req = urllib.request.Request(urlLink)
+            response = urllib.request.urlopen(req)
+            htmlText2 = response.read().decode('UTF-8')
+        except:
+            print('a request timeout')
+            return False
+
         contentText = re.findall(r'<div class=\"feed-item feed-item-hook folding(.*?)<button class=\"meta-item item-collapse js-collapse\">', htmlText2, re.I|re.M|re.S)
         topicFollwer = re.findall(r'<strong>(.*?)<\/strong>(.*?)人关注了该话题', htmlText2, re.I);
         topicName = re.findall(r'<h1 class=\"zm-editable-content\"(.*?)>(.*?)<\/h1>', htmlText2, re.I)
-
-
 
         #将话题插入到话题数据库
         mysqlObj1 = mysqlClass.mysqlClass('localhost', 'root', 'root', 'zhihu')
         table = 'zhihu_topics'
         addTime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        valueStr = " (`topic_id`, `topic`, `topic_tag`, `follwer_user`,  `add_time` ) VALUES " \
-                   " ('" + topicId + "','" + topicTitle + "','" + topicName[0][1] + "','" + topicFollwer[0][0] + "', '" + addTime + "')"
+        valueStr = " (`topic_id`, `topic`, `topic_tag`, `follwer_user`,  `add_time`, `parent_topic_id` ) VALUES " \
+                   " ('" + newTopicId + "','" + topicTitle + "','" + topicName[0][1] + "','" + topicFollwer[0][0] + "', '" + addTime + \
+                   "','" + topicId + "')"
         mysqlObj1.insertRow(table, valueStr)
 
         if contentText:
             for signText in contentText:
-                self.getAnswerContent(signText, topicId)
-                break;
+                result = self.getAnswerContent(signText, newTopicId)
+                if result == False:
+                    return False
+                    break;
 
+        time.sleep(3)
+
+        return True
 
 
 
@@ -158,6 +177,9 @@ class zhihuTopic:
         #问题的ID
         questionId = questionText[0][0].replace('/question/', '')
 
+        if int(voteCount[0])<5000:
+            return False
+
         #知乎的问题写入到mysql
         table = 'zhihu_question'
         addTime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
@@ -180,7 +202,7 @@ class zhihuTopic:
         valueStr = valueStr + commentCount + "','" + pymysql.escape_string(answerContent[0]) + "','" + addTime + "')"
         self.mysqlObj.insertRow(table, valueStr )
 
-        #插入问题到数据库
+        return True
 
 
 

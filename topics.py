@@ -15,12 +15,14 @@ import pymysql
 
 
 class zhihuTopic:
-    topUrl = "https://www.zhihu.com/topics"
 
-    def __init__(self):
+    def __init__(self, topUrl):
         self.userAgent = {'User-Agent' : 'Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.69 Safari/537.36'}
         self.requestUrl = 'http://www.baidu.com'
         self.requestMethod = 'POST'
+
+        self.mysqlObj = mysqlClass.mysqlClass('localhost', 'root', 'root', 'zhihu')
+        self.topUrl = topUrl
 
     def getTopContent(self):
         #获取知乎话题广场的html
@@ -36,16 +38,21 @@ class zhihuTopic:
         if searchObj:
             hrefHtml = searchObj.group();
             urls = re.findall(r'<a.*?href="(.*?)">.*?<\/a>',hrefHtml,re.I)
-            for i in urls:
+            topicId = re.findall(r'<li class=\"zm-topic-cat-item\" data-id=\"(.*?)\">', hrefHtml, re.I)
+            for id in topicId:
+                print (id);
+
+            """for i in urls:
                 print(i)
             else:
                 print ('this is over')
+            """
         else:
            print ("Nothing found!!")
 
     def getTopList(self, topicId):
         url = "https://www.zhihu.com/node/TopicsPlazzaListV2"
-        values = {'method':'next','params': '{"topic_id":253,"offset":0,"hash_id":""}','_xsrf':'337756f889b88582050596b81da0d0a1'}
+        values = {'method':'next','params': '{"topic_id":'+ topicId+ ',"offset":0,"hash_id":""}','_xsrf':'337756f889b88582050596b81da0d0a1'}
 
         data = urllib.parse.urlencode(values).encode('UTF-8')
         request = urllib.request.Request(url = url, data = data, headers = self.userAgent, method = self.requestMethod)
@@ -54,7 +61,7 @@ class zhihuTopic:
         print(textDestination)
 
 
-    def getTopSignList(self, htmlText, offSet='0'):
+    def getTopSignList(self, htmlText, topicTitle):
         #通过ajax获取话题内的标签
         htmlText = htmlText.decode('UTF-8')
         xsrf = re.findall(r'name=\"_xsrf\" value=\"(.*)\"',htmlText,re.I)
@@ -64,20 +71,31 @@ class zhihuTopic:
 
         paramDict = json.loads(paramText)
 
-        #url组装
-        url = "https://www.zhihu.com/node/"+paramDict['nodename']
-        values = {'method':'next','params': '{"topic_id":'+ str(paramDict['params']['topic_id']) + ',"offset":'+offSet+',"hash_id":"'+str(paramDict['params']['hash_id'])+'"}','_xsrf':xsrf[0]}
+        #获取当前页面的topicId
+        topicInfo = re.findall(r'<li class="zm-topic-cat-item" data-id="(.*?)"><a href="#'+topicTitle+'">'+topicTitle+'</a></li>', htmlText, re.I)
 
-        data = urllib.parse.urlencode(values).encode('UTF-8')
-        request = urllib.request.Request(url = url, data = data, headers = self.userAgent, method = self.requestMethod)
+        topicId = topicInfo[0]
 
-        textDestination = urllib.request.urlopen(request).read().decode('utf-8');
-        textDestinationDict = json.loads(textDestination)
-        if textDestinationDict['msg']:
-            for textRow in textDestinationDict['msg']:
-                urlLink = self.getSignLink (textRow)
-                self.getTopicTopAnswers(urlLink)
-                break
+
+        for i in range(0, 10000, 20):
+
+            #url组装
+            url = "https://www.zhihu.com/node/"+paramDict['nodename']
+            values = {'method':'next','params': '{"topic_id":'+ str(topicId) + ',"offset":'+str(i)+',"hash_id":"'+str(paramDict['params']['hash_id'])+'"}','_xsrf':xsrf[0]}
+
+            data = urllib.parse.urlencode(values).encode('UTF-8')
+            request = urllib.request.Request(url = url, data = data, headers = self.userAgent, method = self.requestMethod)
+
+            textDestination = urllib.request.urlopen(request).read().decode('utf-8');
+            textDestinationDict = json.loads(textDestination)
+            if textDestinationDict['msg']:
+                for textRow in textDestinationDict['msg']:
+                    urlLink = self.getSignLink (textRow)
+                    for page in range(1, 50):
+                        self.getTopicTopAnswers(urlLink, topicTitle, topicId, page)
+
+
+
 
 
     def getSignLink(self, htmlText):
@@ -89,19 +107,37 @@ class zhihuTopic:
         return urlLink
 
 
-    def getTopicTopAnswers(self, urlLink, page='1'):
+    def getTopicTopAnswers(self, urlLink, topicTitle='', topicId='1', page='1'):
         #获取话题的精华题目和答案
         print (urlLink)
-        urlLink = urlLink+'?page='+page
+        urlLink = urlLink+'?page='+str(page)
         req = urllib.request.Request(urlLink)
         response = urllib.request.urlopen(req)
-        htmlText = response.read().decode('UTF-8')
-        contentText = re.findall(r'<div class=\"feed-item feed-item-hook folding(.*?)<button class=\"meta-item item-collapse js-collapse\">', htmlText, re.I|re.M|re.S)
-        for signText in contentText:
-            self.getAnswerContent(signText)
-            break;
+        htmlText2 = response.read().decode('UTF-8')
+        contentText = re.findall(r'<div class=\"feed-item feed-item-hook folding(.*?)<button class=\"meta-item item-collapse js-collapse\">', htmlText2, re.I|re.M|re.S)
+        topicFollwer = re.findall(r'<strong>(.*?)<\/strong>(.*?)人关注了该话题', htmlText2, re.I);
+        topicName = re.findall(r'<h1 class=\"zm-editable-content\"(.*?)>(.*?)<\/h1>', htmlText2, re.I)
 
-    def getAnswerContent(self, htmlText):
+
+
+        #将话题插入到话题数据库
+        mysqlObj1 = mysqlClass.mysqlClass('localhost', 'root', 'root', 'zhihu')
+        table = 'zhihu_topics'
+        addTime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        valueStr = " (`topic_id`, `topic`, `topic_tag`, `follwer_user`,  `add_time` ) VALUES " \
+                   " ('" + topicId + "','" + topicTitle + "','" + topicName[0][1] + "','" + topicFollwer[0][0] + "', '" + addTime + "')"
+        mysqlObj1.insertRow(table, valueStr)
+
+        if contentText:
+            for signText in contentText:
+                self.getAnswerContent(signText, topicId)
+                break;
+
+
+
+
+    def getAnswerContent(self, htmlText, topicId='0'):
+
         #获取回答内容里面的问题相关信息
         answerContent = re.findall(r'<textarea hidden class=\"content\">(.*)<\/textarea>', htmlText, re.M|re.S)  #回答内容
 
@@ -113,7 +149,7 @@ class zhihuTopic:
         commentCount = comment[0].replace('条评论', '').replace(' ','')
 
         #问题的回答总数
-
+        answerCount = re.findall(r'<meta itemprop=\"answerCount\" content=\"(.*?)\" \/>', htmlText, re.I)
 
         #问题的标题
         questionText = re.findall(r'<a class=\"question_link\" target=\"_blank\" href=\"(.*)\">(.*)<\/a>', htmlText, re.I|re.M)
@@ -122,25 +158,36 @@ class zhihuTopic:
         #问题的ID
         questionId = questionText[0][0].replace('/question/', '')
 
+        #知乎的问题写入到mysql
+        table = 'zhihu_question'
+        addTime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        valueStr = " (`question_id`, `question_title`, `answer_count`, `add_time`, `topic_id` ) VALUES " \
+                   " ('" + questionId + "','" + questionTitle + "','" + answerCount[0] + "','" + addTime + "','" + topicId + "')"
+        self.mysqlObj.insertRow(table, valueStr)
+
 
         #回答的ID
         answerText = re.findall(r'<meta itemprop=\"answer-url-token\" content=\"(.*)\">', htmlText, re.I)
         answerId = answerText[0]
 
 
-        mysqlObj = mysqlClass.mysqlClass('localhost', 'root', 'root', 'zhihu')
+
+        #插入答案到数据库
         table = 'zhihu_answer'
         addTime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         valueStr = " (`answer_id`, `question_id`, `vote_count`, `comment_num`, `content`, `add_time` ) VALUES " \
                    " ('"+ answerId + "','" + questionId + "','" + voteCount[0] + "','"
         valueStr = valueStr + commentCount + "','" + pymysql.escape_string(answerContent[0]) + "','" + addTime + "')"
-        mysqlObj.insertRow(table, valueStr )
+        self.mysqlObj.insertRow(table, valueStr )
+
+        #插入问题到数据库
 
 
 
-s = zhihuTopic()
+
+s = zhihuTopic('https://www.zhihu.com/topics#创业')
 htmlText = s.getTopContent()
-print(s.getTopSignList(htmlText));
+print(s.getTopSignList(htmlText, '创业'));
 
 
 

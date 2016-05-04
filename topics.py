@@ -134,13 +134,12 @@ class zhihuTopic:
         topicName = re.findall(r'<h1 class=\"zm-editable-content\"(.*?)>(.*?)<\/h1>', htmlText2, re.I)
 
         #将话题插入到话题数据库
-        mysqlObj1 = mysqlClass.mysqlClass('localhost', 'root', 'root', 'zhihu')
         table = 'zhihu_topics'
         addTime = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         valueStr = " (`topic_id`, `topic`, `topic_tag`, `follwer_user`,  `add_time`, `parent_topic_id` ) VALUES " \
                    " ('" + newTopicId + "','" + topicTitle + "','" + topicName[0][1] + "','" + topicFollwer[0][0] + "', '" + addTime + \
                    "','" + topicId + "')"
-        mysqlObj1.insertRow(table, valueStr)
+        self.mysqlObj.insertRow(table, valueStr)
 
         if contentText:
             for signText in contentText:
@@ -148,6 +147,8 @@ class zhihuTopic:
                 if result == False:
                     return False
                     break;
+        else:
+            return False
 
         time.sleep(3)
 
@@ -207,9 +208,9 @@ class zhihuTopic:
 
 
 
-s = zhihuTopic('https://www.zhihu.com/topics#创业')
+s = zhihuTopic('https://www.zhihu.com/topics#投资')
 htmlText = s.getTopContent()
-print(s.getTopSignList(htmlText, '创业'));
+print(s.getTopSignList(htmlText, '投资'));
 
 
 

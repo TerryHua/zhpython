@@ -73,6 +73,27 @@ class exportHtml:
                         self.htmlText = self.htmlText + html.unescape(content) + '<br /><br />'
         return hasQuestion
 
+    def getBySubTopic(self):
+        table = 'zhihu_topics'
+        where = " WHERE parent_topic_id= %s" % (self.topicsId)
+        rows = self.mysqlObj.getAll(table, where)
+        if rows:
+
+            self.htmlPath = "./html"
+            if (os.path.exists(self.htmlPath) == False):  # 判断文件夹是否存在
+                os.mkdir(self.htmlPath, 0o755);
+
+            for row in rows:
+                self.htmlText = self.htmlTitle
+                print(row[1])
+                hasQuestion = self.getQuestionByTopic(row[1])
+                if hasQuestion == True:
+                    self.htmlText = self.htmlText + '<h1>' + row[3] + ' ' + row[4] + '</h1>'
+                    self.htmlText = self.htmlText + self.htmlBottom
+                    f = open(self.htmlPath + '/' + self.topicsId + '_'+ str(row[1]) + '.html', "w", encoding='utf-8')
+                    f.write(self.htmlText)
+                    f.close();
+
 
 
 
@@ -83,5 +104,5 @@ class exportHtml:
 
 
 if __name__ == '__main__':
-    exObj = exportHtml('253')
-    exObj.getTopic()
+    exObj = exportHtml('112')
+    exObj.getBySubTopic()
